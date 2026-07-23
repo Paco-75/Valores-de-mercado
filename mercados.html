@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Valores de mercado</title>
+<style>
+  :root{
+    --bg:#0B0E14;
+    --panel:#12161F;
+    --panel-border:#232837;
+    --text-primary:#E8EAED;
+    --text-secondary:#8B92A5;
+    --text-muted:#565D6E;
+    --amber:#F0B429;
+    --up:#2FD480;
+    --down:#FF5C6C;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text-primary);
+    font-family:var(--font-sans);
+    min-height:100vh;
+  }
+  .wrap{ max-width:1100px; margin:0 auto; padding:28px 20px 60px; }
+
+  header{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:18px; flex-wrap:wrap; }
+  .eyebrow{ font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; color:var(--amber); text-transform:uppercase; margin:0 0 4px; }
+  h1{ font-size:26px; font-weight:600; margin:0; letter-spacing:-0.01em; }
+  .meta{ text-align:right; font-family:var(--font-mono); font-size:12px; color:var(--text-secondary); }
+  .meta .dot{ display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--up); margin-right:6px; }
+
+  .controls{ display:flex; align-items:center; gap:10px; margin-top:8px; }
+  button#refresh{
+    font-family:var(--font-mono); font-size:12px; letter-spacing:.04em;
+    background:transparent; color:var(--text-primary);
+    border:1px solid var(--panel-border); border-radius:6px;
+    padding:7px 14px; cursor:pointer; transition:border-color .15s, color .15s;
+  }
+  button#refresh:hover{ border-color:var(--amber); color:var(--amber); }
+  button#refresh:disabled{ opacity:.5; cursor:default; }
+
+  .ticker-outer{
+    border-top:1px solid var(--panel-border);
+    border-bottom:1px solid var(--panel-border);
+    overflow:hidden; margin:20px 0 28px; background:var(--panel);
+  }
+  .ticker-track{ display:flex; width:max-content; animation: scroll 28s linear infinite; }
+  @keyframes scroll{ from{ transform:translateX(0);} to{ transform:translateX(-50%);} }
+  .tick{ display:flex; align-items:center; gap:8px; font-family:var(--font-mono); font-size:13px; padding:10px 26px; white-space:nowrap; border-right:1px solid var(--panel-border); }
+  .tick .sym{ color:var(--text-secondary); }
+  .tick .chg.up{ color:var(--up); }
+  .tick .chg.down{ color:var(--down); }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:14px; }
+  .card{ background:var(--panel); border:1px solid var(--panel-border); border-radius:10px; padding:18px; display:flex; flex-direction:column; gap:10px; }
+  .card-head{ display:flex; justify-content:space-between; align-items:flex-start; }
+  .name{ font-size:14px; font-weight:600; margin:0; }
+  .symbol{ font-family:var(--font-mono); font-size:11px; color:var(--text-muted); letter-spacing:.05em; }
+  .badge{ font-family:var(--font-mono); font-size:11px; padding:3px 8px; border-radius:20px; font-weight:600; }
+  .badge.up{ color:var(--up); background:rgba(47,212,128,0.12); }
+  .badge.down{ color:var(--down); background:rgba(255,92,108,0.12); }
+
+  .price{ font-family:var(--font-mono); font-size:26px; font-weight:600; letter-spacing:-0.01em; }
+  .subchg{ font-family:var(--font-mono); font-size:12px; }
+  .subchg.up{ color:var(--up); } .subchg.down{ color:var(--down); }
+
+  .spark-wrap{ height:130px; margin-top:6px; }
+
+  .state{ font-family:var(--font-mono); font-size:13px; color:var(--text-secondary); text-align:center; padding:40px 0; }
+  .state.err{ color:var(--down); }
+
+  .skel{ background:linear-gradient(90deg, var(--panel-border) 25%, #1a1f2b 37%, var(--panel-border) 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite; border-radius:4px; }
+  @keyframes shimmer{ 0%{background-position:100% 0;} 100%{background-position:0 0;} }
+  .skel-price{ width:120px; height:26px; }
+  .skel-line{ width:70%; height:12px; }
+
+  footer{ margin-top:26px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); text-align:center; line-height:1.6; }
+
+  .card.error-card{ border-color:rgba(255,92,108,0.4); justify-content:center; align-items:center; text-align:center; }
+  .card.error-card .name{ margin-bottom:6px; }
+  .card.error-card p{ font-size:11px; color:var(--text-muted); font-family:var(--font-mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="eyebrow">Panel en vivo · sin registro · sin cuota de Claude</p>
+      <h1>Valores de mercado</h1>
+      <div class="controls">
+        <button id="refresh" onclick="loadData()">↻ Actualizar</button>
+      </div>
+    </div>
+    <div class="meta">
+      <div><span class="dot" id="statusDot"></span><span id="statusText">Cargando…</span></div>
+      <div id="asOf">—</div>
+    </div>
+  </header>
+
+  <div class="ticker-outer">
+    <div class="ticker-track" id="tickerTrack">
+      <div class="tick"><span class="sym">Cargando…</span></div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid">
+    <div class="card"><div class="card-head"><div><div class="skel skel-line" style="width:90px;margin-bottom:6px;"></div><div class="skel skel-line" style="width:40px;height:10px;"></div></div></div><div class="skel skel-price"></div><div class="skel skel-line" style="width:100px;height:10px;"></div><div class="spark-wrap skel"></div></div>
+    <div class="card"><div class="card-head"><div><div class="skel skel-line" style="width:90px;margin-bottom:6px;"></div><div class="skel skel-line" style="width:40px;height:10px;"></div></div></div><div class="skel skel-price"></div><div class="skel skel-line" style="width:100px;height:10px;"></div><div class="spark-wrap skel"></div></div>
+    <div class="card"><div class="card-head"><div><div class="skel skel-line" style="width:90px;margin-bottom:6px;"></div><div class="skel skel-line" style="width:40px;height:10px;"></div></div></div><div class="skel skel-price"></div><div class="skel skel-line" style="width:100px;height:10px;"></div><div class="spark-wrap skel"></div></div>
+  </div>
+
+  <footer>
+    Bitcoin y oro: <a href="https://www.coingecko.com" target="_blank" rel="noopener" style="color:var(--text-secondary);">CoinGecko</a> (el oro se aproxima con PAX Gold, un token respaldado 1:1 por oro físico) ·
+    Acciones: Yahoo Finance, precio del último cierre ·
+    Sin registro ni API key · No es asesoramiento financiero
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+let charts = {};
+
+function fmtMoney(v, currency){
+  try{
+    return new Intl.NumberFormat('es-ES', { style:'currency', currency: currency || 'EUR', maximumFractionDigits: v < 10 ? 4 : 2 }).format(v);
+  }catch(e){ return (currency==='USD'?'$':'€') + Number(v).toFixed(2); }
+}
+function fmtPct(v){
+  const s = v>=0?'+':'';
+  return s + v.toFixed(2) + '%';
+}
+function fmtDate(d){
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+// ---------- CoinGecko (Bitcoin, Oro vía PAX Gold) ----------
+async function fetchCoinGecko(coinId, name, symbol, multiplier){
+  const url = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=eur&days=8`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+  const data = await res.json();
+  const prices = data.prices; // [[timestamp, price], ...]
+  if(!prices || !prices.length) throw new Error('Sin datos de precio');
+
+  // Agrupar por día (último valor de cada día)
+  const byDay = new Map();
+  prices.forEach(([ts, price]) => {
+    const d = new Date(ts);
+    const key = d.toISOString().slice(0,10);
+    byDay.set(key, { date: d, price });
+  });
+  const days = [...byDay.values()].sort((a,b) => a.date - b.date);
+  const lastDays = days.slice(-7);
+
+  let history = lastDays.map(d => d.price);
+  let historyDates = lastDays.map(d => fmtDate(d.date));
+  let currentPrice = prices[prices.length - 1][1];
+  let weekAgoPrice = history[0];
+
+  if(multiplier){
+    history = history.map(v => v * multiplier);
+    currentPrice = currentPrice * multiplier;
+    weekAgoPrice = weekAgoPrice * multiplier;
+  }
+  history[history.length - 1] = currentPrice;
+
+  const changeAbs = currentPrice - weekAgoPrice;
+  const changePercent = weekAgoPrice ? (changeAbs / weekAgoPrice) * 100 : 0;
+
+  return { id: coinId, name, symbol, currency:'EUR', currentPrice, weekAgoPrice, changePercent, changeAbs, history, historyDates };
+}
+
+// ---------- Yahoo Finance vía varios proxies CORS públicos en cadena (acciones) ----------
+const CORS_PROXIES = [
+  (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
+  (target) => `https://corsproxy.io/?url=${encodeURIComponent(target)}`,
+  (target) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`
+];
+
+async function fetchJsonViaProxies(targetUrl){
+  let lastErr;
+  for(const buildUrl of CORS_PROXIES){
+    try{
+      const res = await fetch(buildUrl(targetUrl));
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      return json;
+    }catch(e){
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('Todos los proxies fallaron');
+}
+
+async function fetchYahoo(symbol, name, displaySymbol, currency, id){
+  const target = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1mo&interval=1d`;
+  const data = await fetchJsonViaProxies(target);
+
+  const result = data?.chart?.result?.[0];
+  if(!result) throw new Error(data?.chart?.error?.description || 'Símbolo no encontrado');
+
+  const timestamps = result.timestamp || [];
+  const closes = result.indicators?.quote?.[0]?.close || [];
+  const rows = timestamps
+    .map((ts, i) => ({ date: new Date(ts * 1000), close: closes[i] }))
+    .filter(r => typeof r.close === 'number');
+
+  if(!rows.length) throw new Error('Sin datos de cotización');
+
+  const last8 = rows.slice(-8);
+  const last7 = rows.slice(-7);
+  const history = last7.map(r => r.close);
+  const historyDates = last7.map(r => fmtDate(r.date));
+  const currentPrice = result.meta?.regularMarketPrice ?? rows[rows.length - 1].close;
+  const weekAgoPrice = last8.length >= 8 ? last8[0].close : history[0];
+
+  const changeAbs = currentPrice - weekAgoPrice;
+  const changePercent = weekAgoPrice ? (changeAbs / weekAgoPrice) * 100 : 0;
+
+  return { id, name, symbol: displaySymbol, currency, currentPrice, weekAgoPrice, changePercent, changeAbs, history, historyDates };
+}
+
+async function fetchStellantis(){
+  // Intenta varias plazas europeas en EUR antes de recurrir a NYSE en USD
+  const attempts = [
+    ['STLAM.MI', 'EUR'], // Borsa Italiana (Milán)
+    ['STLAP.PA', 'EUR'], // Euronext Paris
+    ['STLA', 'USD']      // NYSE, último recurso
+  ];
+  let lastErr;
+  for(const [sym, cur] of attempts){
+    try{
+      return await fetchYahoo(sym, 'Stellantis', 'STLA', cur, 'stellantis');
+    }catch(e){
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
+const FETCHERS = [
+  () => fetchCoinGecko('bitcoin', 'Bitcoin', 'BTC', null),
+  () => fetchCoinGecko('pax-gold', 'Oro (kg)', 'XAU', 32.1507),
+  () => fetchYahoo('ACN', 'Accenture', 'ACN', 'USD', 'accenture'),
+  () => fetchYahoo('SIE.DE', 'Siemens', 'SIE', 'EUR', 'siemens'),
+  () => fetchStellantis()
+];
+
+async function loadData(){
+  const btn = document.getElementById('refresh');
+  const statusText = document.getElementById('statusText');
+  const statusDot = document.getElementById('statusDot');
+  btn.disabled = true;
+  statusText.textContent = 'Actualizando…';
+  statusDot.style.background = '#F0B429';
+
+  const results = await Promise.allSettled(FETCHERS.map(fn => fn()));
+
+  const ok = [];
+  const failed = [];
+  results.forEach((r, i) => {
+    if(r.status === 'fulfilled') ok.push(r.value);
+    else failed.push({ name: ['Bitcoin','Oro','Accenture','Siemens','Stellantis'][i], error: r.reason?.message || 'Error desconocido' });
+  });
+
+  document.getElementById('asOf').textContent = 'Actualizado ' + new Date().toLocaleString('es-ES', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  renderTicker(ok);
+  renderGrid(ok, failed);
+
+  if(failed.length){
+    statusText.textContent = `${ok.length}/${FETCHERS.length} activos cargados`;
+    statusDot.style.background = ok.length ? '#F0B429' : '#FF5C6C';
+  }else{
+    statusText.textContent = 'En vivo';
+    statusDot.style.background = '#2FD480';
+  }
+  btn.disabled = false;
+}
+
+function renderTicker(assets){
+  const track = document.getElementById('tickerTrack');
+  if(!assets.length){
+    track.innerHTML = '<div class="tick"><span class="sym">Sin datos disponibles</span></div>';
+    return;
+  }
+  const items = assets.map(a => tickItem(a)).join('');
+  track.innerHTML = items + items;
+}
+function tickItem(a){
+  const dir = a.changePercent >= 0 ? 'up' : 'down';
+  const arrow = a.changePercent >= 0 ? '▲' : '▼';
+  return `<div class="tick"><span class="sym">${a.symbol}</span><span>${fmtMoney(a.currentPrice, a.currency)}</span><span class="chg ${dir}">${arrow} ${fmtPct(a.changePercent)}</span></div>`;
+}
+
+function renderGrid(assets, failed){
+  const grid = document.getElementById('grid');
+  const okHtml = assets.map(a => cardHtml(a)).join('');
+  const errHtml = (failed || []).map(f => `<div class="card error-card"><div class="name">${f.name}</div><p>No se pudo cargar<br>${(f.error||'').toString().slice(0,120)}</p></div>`).join('');
+  grid.innerHTML = okHtml + errHtml || '<div class="state err" style="grid-column:1/-1;">No se pudieron obtener datos. Pulsa "Actualizar" para reintentar.</div>';
+  assets.forEach(a => drawSpark(a));
+}
+
+function cardHtml(a){
+  const dir = a.changePercent >= 0 ? 'up' : 'down';
+  const arrow = a.changePercent >= 0 ? '▲' : '▼';
+  return `
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <p class="name">${a.name}</p>
+        <p class="symbol">${a.symbol} · ${a.currency}</p>
+      </div>
+      <span class="badge ${dir}">${arrow} ${fmtPct(a.changePercent)}</span>
+    </div>
+    <div class="price">${fmtMoney(a.currentPrice, a.currency)}</div>
+    <div class="subchg ${dir}">${a.changeAbs>=0?'+':''}${fmtMoney(a.changeAbs, a.currency)} esta semana</div>
+    <div class="spark-wrap"><canvas id="spark-${a.id}" role="img" aria-label="Tendencia de ${a.name} en los últimos 7 días"></canvas></div>
+  </div>`;
+}
+
+function drawSpark(a){
+  const ctx = document.getElementById('spark-' + a.id);
+  if(!ctx) return;
+  const up = a.changePercent >= 0;
+  const color = up ? '#2FD480' : '#FF5C6C';
+  const gridColor = '#232837';
+  const tickColor = '#8B92A5';
+  const labels = a.historyDates && a.historyDates.length === (a.history||[]).length
+    ? a.historyDates
+    : (a.history || []).map((_,i)=> i === (a.history.length-1) ? 'Hoy' : `-${a.history.length-1-i}d`);
+
+  if(charts[a.id]) charts[a.id].destroy();
+  charts[a.id] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: a.history || [],
+        borderColor: color,
+        borderWidth: 2,
+        pointRadius: 3,
+        pointBackgroundColor: color,
+        pointBorderColor: color,
+        tension: 0.3,
+        fill: true,
+        backgroundColor: up ? 'rgba(47,212,128,0.08)' : 'rgba(255,92,108,0.08)'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display:false }, tooltip: {
+        enabled:true,
+        callbacks: { label: (ctx)=> fmtMoney(ctx.parsed.y, a.currency) }
+      } },
+      scales: {
+        x: {
+          display:true,
+          grid: { color: gridColor, drawTicks:false },
+          ticks: { color: tickColor, font: { family:"ui-monospace, monospace", size:9 }, maxRotation:0, autoSkip:true, maxTicksLimit:7 },
+          border: { color: gridColor }
+        },
+        y: {
+          display:true,
+          grid: { color: gridColor, drawTicks:false },
+          ticks: {
+            color: tickColor,
+            font: { family:"ui-monospace, monospace", size:9 },
+            maxTicksLimit:4,
+            callback: (val) => fmtMoney(val, a.currency)
+          },
+          border: { color: gridColor }
+        }
+      },
+      elements: { line: { capBezierPoints:true } }
+    }
+  });
+}
+
+loadData();
+</script>
+</body>
+</html>
